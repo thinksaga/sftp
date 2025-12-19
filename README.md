@@ -4,8 +4,8 @@ A secure, standalone SFTP server implementation using Node.js and `ssh2`. design
 
 ## Features
 - **Secure Transport:** Uses SSH2 protocol.
-- **Directory Restriction:** Users are confined to the `remote_folder` directory for security.
-- **Interactive Launcher:** Easy-to-use startup script (`start.js`) for configuration.
+- **Directory Restriction:** Users are confined to the `data/sftp_root` directory for security.
+- **Interactive Launcher:** Easy-to-use startup script (`npm start`) for configuration.
 - **Cross-Platform:** Runs on Windows, Linux, and macOS.
 
 ## Prerequisites
@@ -27,25 +27,29 @@ A secure, standalone SFTP server implementation using Node.js and `ssh2`. design
 
 ### Method 1: Interactive Launcher (Recommended)
 Run the starter script to generate keys (if missing) and set temporary credentials:
+Run the starter script to generate keys (if missing) and set temporary credentials:
 ```bash
-node start.js
+npm start
 ```
 Follow the prompts to enter a username and password.
 
 ### Method 2: Manual Start
 1. Generate a host key (if first time):
    ```bash
-   node generate_key.js
+   ```bash
+   node scripts/generate_key.js
    ```
 2. Start the server (uses Environment Variables for credentials):
    ```bash
    # Linux/Mac
    export SFTP_USER=myuser
    export SFTP_PASS=mypass
-   node server.js
+   export SFTP_USER=myuser
+   export SFTP_PASS=mypass
+   node src/index.js
    
    # Windows (PowerShell)
-   $env:SFTP_USER="myuser"; $env:SFTP_PASS="mypass"; node server.js
+   $env:SFTP_USER="myuser"; $env:SFTP_PASS="mypass"; node src/index.js
    ```
    *Defaults if unset: `user` / `password`*
 
@@ -65,10 +69,11 @@ To access from the internet:
 3. Connect using your **Public IP**.
 
 ## Project Structure
-- `start.js`: Interactive launcher script.
-- `server.js`: Main server logic and SFTP request handling.
-- `generate_key.js`: Utility to generate RSA host keys.
-- `remote_folder/`: The root directory for SFTP users.
+- `scripts/start.js`: Interactive launcher script.
+- `src/index.js`: Main server logic and SFTP request handling.
+- `scripts/generate_key.js`: Utility to generate RSA host keys.
+- `data/sftp_root/`: The root directory for SFTP users.
+- `keys/`: Directory for storing host keys.
 
 ## License
 MIT
