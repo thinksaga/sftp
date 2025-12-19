@@ -2,8 +2,8 @@ const fs = require('fs');
 const { Server } = require('ssh2');
 const path = require('path');
 
-const HOST_KEY_PATH = 'host_rsa_key';
-const REMOTE_FOLDER = path.join(__dirname, 'remote_folder');
+const HOST_KEY_PATH = path.join(__dirname, '../keys/host_rsa_key');
+const REMOTE_FOLDER = path.join(__dirname, '../sftp_root');
 
 // Ensure remote_folder exists
 if (!fs.existsSync(REMOTE_FOLDER)) {

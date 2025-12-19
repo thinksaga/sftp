@@ -16,7 +16,7 @@ async function main() {
     console.log('--- SFTP Server Launcher ---');
 
     // 1. Check and install dependencies
-    if (!fs.existsSync(path.join(__dirname, 'node_modules'))) {
+    if (!fs.existsSync(path.join(__dirname, '../node_modules'))) {
         console.log('Installing dependencies...');
         try {
             execSync('npm install', { stdio: 'inherit' });
@@ -27,12 +27,12 @@ async function main() {
     }
 
     // 2. Check and generate host key
-    if (!fs.existsSync(path.join(__dirname, 'host_rsa_key'))) {
+    if (!fs.existsSync(path.join(__dirname, '../keys/host_rsa_key'))) {
         console.log('Generating host key...');
         try {
             // We can run the existing script or just do it here if we import it.
             // Let's run the script to keep it modular.
-            execSync('node generate_key.js', { stdio: 'inherit' });
+            execSync('node ' + path.join(__dirname, 'generate_key.js'), { stdio: 'inherit' });
         } catch (e) {
             console.error('Failed to generate host key.');
             process.exit(1);
@@ -45,7 +45,7 @@ async function main() {
 
     console.log('\nStarting server...');
 
-    const serverProcess = spawn('node', ['server.js'], {
+    const serverProcess = spawn('node', ['src/index.js'], {
         stdio: 'inherit',
         env: { ...process.env, SFTP_USER: username, SFTP_PASS: password }
     });

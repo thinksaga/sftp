@@ -1,5 +1,6 @@
 const { generateKeyPairSync } = require('crypto');
 const fs = require('fs');
+const path = require('path');
 
 const { privateKey } = generateKeyPairSync('rsa', {
   modulusLength: 4096,
@@ -13,5 +14,5 @@ const { privateKey } = generateKeyPairSync('rsa', {
   }
 });
 
-fs.writeFileSync('host_rsa_key', privateKey);
+fs.writeFileSync(path.join(__dirname, '../keys/host_rsa_key'), privateKey);
 console.log('Host key generated.');
