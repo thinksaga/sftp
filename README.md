@@ -4,7 +4,7 @@ A secure, standalone SFTP server implementation using Node.js and `ssh2`. design
 
 ## Features
 - **Secure Transport:** Uses SSH2 protocol.
-- **Directory Restriction:** Users are confined to the `data/sftp_root` directory for security.
+- **Directory Restriction:** Users are confined to the `sftp_root` directory for security.
 - **Interactive Launcher:** Easy-to-use startup script (`npm start`) for configuration.
 - **Cross-Platform:** Runs on Windows, Linux, and macOS.
 
@@ -72,7 +72,7 @@ To access from the internet:
 - `scripts/start.js`: Interactive launcher script.
 - `src/index.js`: Main server logic and SFTP request handling.
 - `scripts/generate_key.js`: Utility to generate RSA host keys.
-- `data/sftp_root/`: The root directory for SFTP users.
+- `sftp_root/`: The root directory for SFTP users.
 - `keys/`: Directory for storing host keys.
 
 ## License
