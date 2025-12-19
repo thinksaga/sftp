@@ -72,3 +72,9 @@ To access from the internet:
 
 ## License
 MIT
+
+## Author
+
+**Rajat Gupta**
+Founder, [Thinksaga LLP](https://thinksaga.in)
+Email: [ceo@thinksaga.in](mailto:ceo@thinksaga.in)
