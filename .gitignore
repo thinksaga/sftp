@@ -1,0 +1,4 @@
+node_modules/
+host_rsa_key
+remote_folder/
+.env
