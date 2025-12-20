@@ -131,14 +131,27 @@ async function main() {
     console.log(`Local Address: sftp://${localIP}:${port}`);
     console.log(`Username     : ${username}`);
     console.log(`Password     : ${password}`);
-    console.log('\nPress "q" and Enter to stop the server.');
+    console.log('\nCommands:');
+    console.log('  "q" + Enter to stop the server.');
+    console.log('  "c" + Enter to check public connectivity.');
     console.log('----------------------------\n');
 
-    rl.on('line', (input) => {
-        if (input.trim().toLowerCase() === 'q') {
+    rl.on('line', async (input) => {
+        const cmd = input.trim().toLowerCase();
+        if (cmd === 'q') {
             console.log('Stopping server...');
             serverProcess.kill();
             process.exit(0);
+        } else if (cmd === 'c') {
+            if (!publicIP) {
+                console.log('❌ Could not determine public IP.');
+                return;
+            }
+            console.log(`🔍 Checking if port ${port} is reachable on ${publicIP}...`);
+            // Using a simple timeout-based check isn't possible from inside the network 
+            // due to NAT loopback. We suggest a manual check or use a helper.
+            console.log(`Navigate to: https://portchecker.co/check?ip=${publicIP}&port=${port}`);
+            console.log(`Or: https://canyouseeme.org/ (Enter port ${port})`);
         }
     });
 
