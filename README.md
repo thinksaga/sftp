@@ -35,25 +35,25 @@ npm start
 2. Start the server (using Environment Variables):
    ```powershell
    # Windows (PowerShell)
-   $env:SFTP_USER="myuser"; $env:SFTP_PASS="mypass"; $env:SFTP_PORT="2222"; node src/index.js
+   $env:SFTP_USER="admin"; $env:SFTP_PASS="admin"; $env:SFTP_PORT="22"; node src/index.js
    ```
 
 ## Windows Server Tips
-- **Firewall:** You must open the configured port (default 2222) in the Windows Defender Firewall.
+- **Firewall:** You must open the configured port (default 22) in the Windows Defender Firewall.
   Run one of these commands as **Administrator**:
   
   **PowerShell:**
   ```powershell
-  New-NetFirewallRule -DisplayName "Node SFTP Server" -Direction Inbound -LocalPort 2222 -Protocol TCP -Action Allow
+  New-NetFirewallRule -DisplayName "Node SFTP Server" -Direction Inbound -LocalPort 22 -Protocol TCP -Action Allow
   ```
   
   **Command Prompt (netsh):**
   ```cmd
-  netsh advfirewall firewall add rule name="Node SFTP Server" dir=in action=allow protocol=TCP localport=2222
+  netsh advfirewall firewall add rule name="Node SFTP Server" dir=in action=allow protocol=TCP localport=22
   ```
 
 - **Permissions:** Make sure the user running the Node.js process has read/write permissions to the `sftp_root` folder.
-- **Port Conflict:** Windows Server might have OpenSSH Server enabled on port 22. This script uses 2222 by default to avoid conflict.
+- **Port Conflict:** Windows Server might have OpenSSH Server enabled on port 22. If this fails, use a different port (like 2222).
 
 ## Project Structure
 - `scripts/start.js`: Interactive launcher.

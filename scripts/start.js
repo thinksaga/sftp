@@ -1,8 +1,9 @@
-const { spawn, execSync } = require('child_process');
+const { spawn, execSync, exec } = require('child_process');
 const fs = require('fs');
 const readline = require('readline');
 const path = require('path');
 const os = require('os');
+const http = require('http');
 
 const rl = readline.createInterface({
     input: process.stdin,
@@ -25,6 +26,27 @@ function getLocalIP() {
         }
     }
     return '0.0.0.0';
+}
+
+function getPublicIP() {
+    return new Promise((resolve) => {
+        http.get({ host: 'api64.ipify.org', port: 80, path: '/' }, (resp) => {
+            let data = '';
+            resp.on('data', (chunk) => data += chunk);
+            resp.on('end', () => resolve(data));
+        }).on('error', () => resolve(null));
+    });
+}
+
+function checkFirewall(port) {
+    if (process.platform !== 'win32') return true;
+    try {
+        const cmd = `netsh advfirewall firewall show rule name=all | findstr "${port}"`;
+        const output = execSync(cmd, { stdio: 'pipe' }).toString();
+        return output.includes(port.toString());
+    } catch (e) {
+        return false;
+    }
 }
 
 async function main() {
@@ -57,9 +79,25 @@ async function main() {
 
     // 3. Ask for credentials
     console.log('Configure SFTP Access:');
-    const username = (await askQuestion('  Username (default: user): ')) || 'user';
-    const password = (await askQuestion('  Password (default: password): ')) || 'password';
-    const port = (await askQuestion('  Port (default: 2222): ')) || '2222';
+    const username = (await askQuestion('  Username (default: admin): ')) || 'admin';
+    const password = (await askQuestion('  Password (default: admin): ')) || 'admin';
+    const port = (await askQuestion('  Port (default: 22): ')) || '22';
+
+    const firewallOpen = checkFirewall(port);
+    const publicIP = await getPublicIP();
+
+    console.log('\n--- Status Check ---');
+    if (firewallOpen) {
+        console.log(`✅ Windows Firewall: Port ${port} is OPEN.`);
+    } else {
+        console.log(`❌ Windows Firewall: Port ${port} is BLOCKED.`);
+        console.log(`   Tip: Run the firewall command from README.md as Administrator.`);
+    }
+
+    if (publicIP) {
+        console.log(`ℹ️  Public IP detected: ${publicIP}`);
+        console.log(`   Router Tip: Ensure Port ${port} is forwarded to ${getLocalIP()} in your router settings.`);
+    }
 
     console.log('\n--- Starting SFTP Server ---');
 

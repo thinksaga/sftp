@@ -3,7 +3,7 @@ const { Server } = require('ssh2');
 const path = require('path');
 
 // Configurations
-const PORT = process.env.SFTP_PORT || 2222;
+const PORT = process.env.SFTP_PORT || 22;
 const HOST_KEY_PATH = path.join(__dirname, '../keys/host_rsa_key');
 const REMOTE_FOLDER = path.resolve(__dirname, '../sftp_root');
 
@@ -80,8 +80,8 @@ const server = new Server({
     console.log(`[${new Date().toISOString()}] Client connected!`);
 
     client.on('authentication', (ctx) => {
-        const allowedUser = process.env.SFTP_USER || 'user';
-        const allowedPass = process.env.SFTP_PASS || 'password';
+        const allowedUser = process.env.SFTP_USER || 'admin';
+        const allowedPass = process.env.SFTP_PASS || 'admin';
 
         if (ctx.method === 'password' && ctx.username === allowedUser && ctx.password === allowedPass) {
             console.log(`[${new Date().toISOString()}] Authentication successful for user: ${ctx.username}`);
