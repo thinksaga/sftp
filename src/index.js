@@ -4,7 +4,7 @@ const path = require('path');
 
 // Configurations
 const PORT = process.env.SFTP_PORT || 22;
-const HOST_KEY_PATH = path.join(__dirname, '../keys/host_rsa_key');
+const HOST_KEY_PATH = path.resolve(__dirname, '../keys/host_rsa_key');
 const REMOTE_FOLDER = path.resolve(__dirname, '../sftp_root');
 
 // Ensure remote_folder exists
