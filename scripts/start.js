@@ -49,6 +49,20 @@ function checkFirewall(port) {
     }
 }
 
+function checkPortUsage(port) {
+    try {
+        const cmd = `netstat -ano | findstr ":${port}" | findstr "LISTENING"`;
+        const output = execSync(cmd, { stdio: 'pipe' }).toString();
+        if (output.trim()) {
+            const pid = output.trim().split(/\s+/).pop();
+            return pid;
+        }
+        return false;
+    } catch (e) {
+        return false;
+    }
+}
+
 async function main() {
     console.clear();
     console.log('====================================');
@@ -84,9 +98,15 @@ async function main() {
     const port = (await askQuestion('  Port (default: 22): ')) || '22';
 
     const firewallOpen = checkFirewall(port);
+    const portUsagePid = checkPortUsage(port);
     const publicIP = await getPublicIP();
 
     console.log('\n--- Status Check ---');
+    if (portUsagePid) {
+        console.log(`⚠️  PORT CONFLICT: Port ${port} is already in use by PID: ${portUsagePid}.`);
+        console.log(`   Tip: Stop the existing service or choose a different port.`);
+    }
+
     if (firewallOpen) {
         console.log(`✅ Windows Firewall: Port ${port} is OPEN.`);
     } else {
