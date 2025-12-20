@@ -2,54 +2,104 @@ const fs = require('fs');
 const { Server } = require('ssh2');
 const path = require('path');
 
+// Configurations
+const PORT = process.env.SFTP_PORT || 2222;
 const HOST_KEY_PATH = path.join(__dirname, '../keys/host_rsa_key');
-const REMOTE_FOLDER = path.join(__dirname, '../sftp_root');
+const REMOTE_FOLDER = path.resolve(__dirname, '../sftp_root');
 
 // Ensure remote_folder exists
 if (!fs.existsSync(REMOTE_FOLDER)) {
-    fs.mkdirSync(REMOTE_FOLDER);
+    console.log(`Creating SFTP root directory: ${REMOTE_FOLDER}`);
+    fs.mkdirSync(REMOTE_FOLDER, { recursive: true });
 }
 
 if (!fs.existsSync(HOST_KEY_PATH)) {
-    console.error('Host key not found. Please generate it first.');
+    console.error('Host key not found! Run "node scripts/generate_key.js" first.');
     process.exit(1);
 }
 
+/**
+ * Normalizes an SFTP path and resolves it to a local filesystem path.
+ * Ensures the path stays within the REMOTE_FOLDER.
+ */
 function toLocalPath(sftpPath) {
-    let normalized = path.normalize(sftpPath);
-    if (normalized.startsWith('/') || normalized.startsWith('\\')) {
+    // SFTP paths are always / based. Normalize them.
+    let normalized = sftpPath.replace(/\\/g, '/');
+    while (normalized.startsWith('/')) {
         normalized = normalized.substring(1);
     }
+
     const resolved = path.resolve(REMOTE_FOLDER, normalized);
-    if (!resolved.startsWith(REMOTE_FOLDER)) {
-        return null;
+
+    // Security check: Ensure the resolved path is inside the REMOTE_FOLDER
+    const relative = path.relative(REMOTE_FOLDER, resolved);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
+        return null; // Potential directory traversal
     }
     return resolved;
+}
+
+/**
+ * Converts fs.Stats to SFTP Attributes
+ */
+function statsToAttrs(stats) {
+    return {
+        mode: stats.mode,
+        uid: stats.uid || 0,
+        gid: stats.gid || 0,
+        size: stats.size,
+        atime: Math.floor(stats.atimeMs / 1000),
+        mtime: Math.floor(stats.mtimeMs / 1000)
+    };
+}
+
+/**
+ * Formats a directory entry for SFTP 'name' response (ls -l style)
+ */
+function formatLongname(filename, stats) {
+    const isDir = stats.isDirectory();
+    const mode = stats.mode;
+
+    // Simplified ls -l output
+    const type = isDir ? 'd' : '-';
+    const perms = [
+        (mode & 0o400) ? 'r' : '-', (mode & 0o200) ? 'w' : '-', (mode & 0o100) ? 'x' : '-',
+        (mode & 0o040) ? 'r' : '-', (mode & 0o020) ? 'w' : '-', (mode & 0o010) ? 'x' : '-',
+        (mode & 0o004) ? 'r' : '-', (mode & 0o002) ? 'w' : '-', (mode & 0o001) ? 'x' : '-'
+    ].join('');
+
+    const size = stats.size.toString().padStart(10);
+    const mtime = stats.mtime.toDateString().split(' ').slice(1, 4).join(' '); // e.g. "Dec 20 2025"
+
+    return `${type}${perms} 1 user group ${size} ${mtime} ${filename}`;
 }
 
 const server = new Server({
     hostKeys: [fs.readFileSync(HOST_KEY_PATH)]
 }, (client) => {
-    console.log('Client connected!');
+    console.log(`[${new Date().toISOString()}] Client connected!`);
 
     client.on('authentication', (ctx) => {
         const allowedUser = process.env.SFTP_USER || 'user';
         const allowedPass = process.env.SFTP_PASS || 'password';
 
         if (ctx.method === 'password' && ctx.username === allowedUser && ctx.password === allowedPass) {
+            console.log(`[${new Date().toISOString()}] Authentication successful for user: ${ctx.username}`);
             ctx.accept();
         } else {
+            console.log(`[${new Date().toISOString()}] Authentication failed for user: ${ctx.username}`);
             ctx.reject();
         }
     });
 
     client.on('ready', () => {
-        console.log('Client authenticated!');
+        console.log('Client authenticated and ready.');
 
         client.on('session', (accept, reject) => {
             const session = accept();
+
             session.on('sftp', (accept, reject) => {
-                console.log('Client requested SFTP');
+                console.log('SFTP session started.');
                 const sftp = accept();
 
                 const openFiles = new Map();
@@ -66,8 +116,9 @@ const server = new Server({
                     let code = 0; // SSH_FX_OK
                     if (err) {
                         code = 4; // SSH_FX_FAILURE
-                        if (err.code === 'ENOENT') code = 2;
-                        if (err.code === 'EACCES') code = 3;
+                        if (err.code === 'ENOENT') code = 2; // SSH_FX_NO_SUCH_FILE
+                        if (err.code === 'EACCES') code = 3; // SSH_FX_PERMISSION_DENIED
+                        console.error(`SFTP Error: ${err.message}`);
                     }
                     sftp.status(reqId, code);
                 }
@@ -76,9 +127,6 @@ const server = new Server({
                     const localPath = toLocalPath(filename);
                     if (!localPath) return sftp.status(reqId, 3);
 
-                    // Map string flags if needed, but ssh2 usually handles it.
-                    // However, flags might be a number.
-                    // fs.open accepts string or number.
                     fs.open(localPath, flags, (err, fd) => {
                         if (err) return sendStatus(reqId, err);
                         const handle = getHandle();
@@ -92,7 +140,7 @@ const server = new Server({
                     if (fd === undefined) return sftp.status(reqId, 4);
 
                     const buffer = Buffer.alloc(length);
-                    fs.read(fd, buffer, 0, length, offset, (err, bytesRead, buffer) => {
+                    fs.read(fd, buffer, 0, length, offset, (err, bytesRead) => {
                         if (err) return sendStatus(reqId, err);
                         if (bytesRead === 0) return sftp.status(reqId, 1); // SSH_FX_EOF
                         sftp.data(reqId, buffer.slice(0, bytesRead));
@@ -125,96 +173,95 @@ const server = new Server({
                     }
                 });
 
-                sftp.on('REALPATH', (reqId, path) => {
-                    let name = path;
-                    if (path === '.') name = '/';
-                    // We always return absolute paths relative to our root
-                    // For simplicity, just echo back what they asked for as "root"
+                sftp.on('REALPATH', (reqId, sftpPath) => {
+                    let name = sftpPath;
+                    if (sftpPath === '.' || sftpPath === '') name = '/';
+
+                    // Always normalize to forward slashes for the client
+                    name = name.replace(/\\/g, '/');
+                    if (!name.startsWith('/')) name = '/' + name;
+
                     sftp.name(reqId, [{ filename: name, longname: name }]);
                 });
 
-                sftp.on('OPENDIR', (reqId, path) => {
-                    const localPath = toLocalPath(path);
+                sftp.on('OPENDIR', (reqId, sftpPath) => {
+                    const localPath = toLocalPath(sftpPath);
                     if (!localPath) return sftp.status(reqId, 3);
 
                     fs.readdir(localPath, (err, files) => {
                         if (err) return sendStatus(reqId, err);
                         const handle = getHandle();
-                        openDirs.set(handle.readUInt32BE(0), files);
+                        // Store both the files and the base path for stat processing
+                        openDirs.set(handle.readUInt32BE(0), {
+                            files,
+                            localPath
+                        });
                         sftp.handle(reqId, handle);
                     });
                 });
 
                 sftp.on('READDIR', (reqId, handle) => {
                     const id = handle.readUInt32BE(0);
-                    const files = openDirs.get(id);
-                    if (!files) return sftp.status(reqId, 4);
+                    const dirData = openDirs.get(id);
+                    if (!dirData) return sftp.status(reqId, 4);
+
+                    const { files, localPath } = dirData;
 
                     if (files.length === 0) {
                         return sftp.status(reqId, 1); // EOF
                     }
 
-                    // Send all files (or a chunk)
-                    // For simplicity, send all and clear the list
-                    const list = files.map(f => {
-                        const stats = fs.statSync(path.join(REMOTE_FOLDER, f)); // Simplified: should use full path
-                        // We need to construct attributes.
-                        // ssh2 doesn't export a helper for this easily?
-                        // We can just send filename and longname.
-                        return {
-                            filename: f,
-                            longname: f, // Ideally `ls -l` format
-                            attrs: {
-                                mode: stats.mode,
-                                uid: stats.uid,
-                                gid: stats.gid,
-                                size: stats.size,
-                                atime: stats.atimeMs / 1000,
-                                mtime: stats.mtimeMs / 1000
-                            }
-                        };
-                    });
+                    // Process directory entries
+                    const list = [];
+                    // We can send a batch of files. Let's send up to 100 at a time.
+                    const batchSize = Math.min(files.length, 100);
+                    const batch = files.splice(0, batchSize);
 
-                    openDirs.set(id, []); // Clear so next call returns EOF
+                    for (const f of batch) {
+                        try {
+                            const fullPath = path.join(localPath, f);
+                            const stats = fs.statSync(fullPath);
+                            list.push({
+                                filename: f,
+                                longname: formatLongname(f, stats),
+                                attrs: statsToAttrs(stats)
+                            });
+                        } catch (e) {
+                            console.warn(`Could not stat file: ${f}`, e.message);
+                            // Fallback for files we can't stat
+                            list.push({
+                                filename: f,
+                                longname: f,
+                                attrs: { mode: 0, uid: 0, gid: 0, size: 0, atime: 0, mtime: 0 }
+                            });
+                        }
+                    }
+
                     sftp.name(reqId, list);
                 });
 
-                sftp.on('STAT', (reqId, path) => {
-                    const localPath = toLocalPath(path);
+                sftp.on('STAT', (reqId, sftpPath) => {
+                    const localPath = toLocalPath(sftpPath);
                     if (!localPath) return sftp.status(reqId, 3);
 
                     fs.stat(localPath, (err, stats) => {
                         if (err) return sendStatus(reqId, err);
-                        sftp.attrs(reqId, {
-                            mode: stats.mode,
-                            uid: stats.uid,
-                            gid: stats.gid,
-                            size: stats.size,
-                            atime: stats.atimeMs / 1000,
-                            mtime: stats.mtimeMs / 1000
-                        });
+                        sftp.attrs(reqId, statsToAttrs(stats));
                     });
                 });
 
-                sftp.on('LSTAT', (reqId, path) => {
-                    const localPath = toLocalPath(path);
+                sftp.on('LSTAT', (reqId, sftpPath) => {
+                    const localPath = toLocalPath(sftpPath);
                     if (!localPath) return sftp.status(reqId, 3);
 
                     fs.lstat(localPath, (err, stats) => {
                         if (err) return sendStatus(reqId, err);
-                        sftp.attrs(reqId, {
-                            mode: stats.mode,
-                            uid: stats.uid,
-                            gid: stats.gid,
-                            size: stats.size,
-                            atime: stats.atimeMs / 1000,
-                            mtime: stats.mtimeMs / 1000
-                        });
+                        sftp.attrs(reqId, statsToAttrs(stats));
                     });
                 });
 
-                sftp.on('MKDIR', (reqId, path, attrs) => {
-                    const localPath = toLocalPath(path);
+                sftp.on('MKDIR', (reqId, sftpPath, attrs) => {
+                    const localPath = toLocalPath(sftpPath);
                     if (!localPath) return sftp.status(reqId, 3);
                     fs.mkdir(localPath, (err) => {
                         if (err) return sendStatus(reqId, err);
@@ -222,8 +269,8 @@ const server = new Server({
                     });
                 });
 
-                sftp.on('RMDIR', (reqId, path) => {
-                    const localPath = toLocalPath(path);
+                sftp.on('RMDIR', (reqId, sftpPath) => {
+                    const localPath = toLocalPath(sftpPath);
                     if (!localPath) return sftp.status(reqId, 3);
                     fs.rmdir(localPath, (err) => {
                         if (err) return sendStatus(reqId, err);
@@ -231,8 +278,8 @@ const server = new Server({
                     });
                 });
 
-                sftp.on('REMOVE', (reqId, path) => {
-                    const localPath = toLocalPath(path);
+                sftp.on('REMOVE', (reqId, sftpPath) => {
+                    const localPath = toLocalPath(sftpPath);
                     if (!localPath) return sftp.status(reqId, 3);
                     fs.unlink(localPath, (err) => {
                         if (err) return sendStatus(reqId, err);
@@ -240,6 +287,22 @@ const server = new Server({
                     });
                 });
 
+                sftp.on('RENAME', (reqId, oldPath, newPath) => {
+                    const localOldPath = toLocalPath(oldPath);
+                    const localNewPath = toLocalPath(newPath);
+                    if (!localOldPath || !localNewPath) return sftp.status(reqId, 3);
+
+                    fs.rename(localOldPath, localNewPath, (err) => {
+                        if (err) return sendStatus(reqId, err);
+                        sftp.status(reqId, 0);
+                    });
+                });
+
+                sftp.on('SETSTAT', (reqId, sftpPath, attrs) => {
+                    // Setting attributes is often limited on Windows
+                    // We'll just acknowledge it for compatibility
+                    sftp.status(reqId, 0);
+                });
             });
         });
     });
@@ -247,8 +310,13 @@ const server = new Server({
     client.on('end', () => {
         console.log('Client disconnected');
     });
+
+    client.on('error', (err) => {
+        console.error('Client error:', err.message);
+    });
 });
 
-server.listen(2222, '0.0.0.0', () => {
-    console.log('SFTP Server listening on port 2222');
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`SFTP Server listening on port ${PORT}`);
+    console.log(`Root directory: ${REMOTE_FOLDER}`);
 });

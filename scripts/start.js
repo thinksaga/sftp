@@ -2,6 +2,7 @@ const { spawn, execSync } = require('child_process');
 const fs = require('fs');
 const readline = require('readline');
 const path = require('path');
+const os = require('os');
 
 const rl = readline.createInterface({
     input: process.stdin,
@@ -12,8 +13,25 @@ function askQuestion(query) {
     return new Promise(resolve => rl.question(query, resolve));
 }
 
+function getLocalIP() {
+    const interfaces = os.networkInterfaces();
+    for (const devName in interfaces) {
+        const iface = interfaces[devName];
+        for (let i = 0; i < iface.length; i++) {
+            const alias = iface[i];
+            if (alias.family === 'IPv4' && alias.address !== '127.0.0.1' && !alias.internal) {
+                return alias.address;
+            }
+        }
+    }
+    return '0.0.0.0';
+}
+
 async function main() {
-    console.log('--- SFTP Server Launcher ---');
+    console.clear();
+    console.log('====================================');
+    console.log('     SFTP Server Launcher (Windows) ');
+    console.log('====================================\n');
 
     // 1. Check and install dependencies
     if (!fs.existsSync(path.join(__dirname, '../node_modules'))) {
@@ -30,8 +48,6 @@ async function main() {
     if (!fs.existsSync(path.join(__dirname, '../keys/host_rsa_key'))) {
         console.log('Generating host key...');
         try {
-            // We can run the existing script or just do it here if we import it.
-            // Let's run the script to keep it modular.
             execSync('node ' + path.join(__dirname, 'generate_key.js'), { stdio: 'inherit' });
         } catch (e) {
             console.error('Failed to generate host key.');
@@ -40,18 +56,25 @@ async function main() {
     }
 
     // 3. Ask for credentials
-    const username = await askQuestion('Enter SFTP Username: ');
-    const password = await askQuestion('Enter SFTP Password: ');
+    console.log('Configure SFTP Access:');
+    const username = (await askQuestion('  Username (default: user): ')) || 'user';
+    const password = (await askQuestion('  Password (default: password): ')) || 'password';
+    const port = (await askQuestion('  Port (default: 2222): ')) || '2222';
 
-    console.log('\nStarting server...');
+    console.log('\n--- Starting SFTP Server ---');
 
     const serverProcess = spawn('node', ['src/index.js'], {
         stdio: 'inherit',
-        env: { ...process.env, SFTP_USER: username, SFTP_PASS: password }
+        env: { ...process.env, SFTP_USER: username, SFTP_PASS: password, SFTP_PORT: port }
     });
 
-    console.log('\nServer is running.');
-    console.log('Press "q" and Enter to stop the server and exit.');
+    const localIP = getLocalIP();
+    console.log('\nSUCCESS: Server is running!');
+    console.log(`Local Address: sftp://${localIP}:${port}`);
+    console.log(`Username     : ${username}`);
+    console.log(`Password     : ${password}`);
+    console.log('\nPress "q" and Enter to stop the server.');
+    console.log('----------------------------\n');
 
     rl.on('line', (input) => {
         if (input.trim().toLowerCase() === 'q') {
@@ -62,8 +85,10 @@ async function main() {
     });
 
     serverProcess.on('close', (code) => {
-        console.log(`Server process exited with code ${code}`);
-        process.exit(code);
+        if (code !== 0 && code !== null) {
+            console.log(`Server process exited with code ${code}`);
+        }
+        process.exit(code || 0);
     });
 }
 

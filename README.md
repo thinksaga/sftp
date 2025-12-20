@@ -1,24 +1,20 @@
 # Node.js Secure SFTP Server
 
-A secure, standalone SFTP server implementation using Node.js and `ssh2`. designed to run on Windows (or any Node.js supported OS) and allow file transfers via local or public network.
+A secure, standalone SFTP server implementation using Node.js and `ssh2`. Designed to run on Windows Server (or any Node.js supported OS) to allow safe file transfers.
 
 ## Features
-- **Secure Transport:** Uses SSH2 protocol.
-- **Directory Restriction:** Users are confined to the `sftp_root` directory for security.
-- **Interactive Launcher:** Easy-to-use startup script (`npm start`) for configuration.
-- **Cross-Platform:** Runs on Windows, Linux, and macOS.
-
-## Prerequisites
-- Node.js (v14 or higher recommended)
-- TCP Port 2222 available
+- **Secure Transport:** Uses SSH2 protocol for encrypted transfers.
+- **Directory Restriction (Chroot):** Users are strictly confined to the `sftp_root` directory.
+- **Improved Windows Support:** Handles Windows path resolving and provides proper directory listings (`ls -l`).
+- **Interactive Launcher:** Simple CLI tool to configure and start the server.
 
 ## Installation
-1. Clone the repository.
+1. Clone the repository:
    ```bash
    git clone https://github.com/thinksaga/sftp.git
    cd sftp
    ```
-2. Install dependencies (handled automatically by launcher, or manually):
+2. Install dependencies (handled automatically by launcher):
    ```bash
    npm install
    ```
@@ -26,60 +22,38 @@ A secure, standalone SFTP server implementation using Node.js and `ssh2`. design
 ## Usage
 
 ### Method 1: Interactive Launcher (Recommended)
-Run the starter script to generate keys (if missing) and set temporary credentials:
-Run the starter script to generate keys (if missing) and set temporary credentials:
+This script helps you set credentials, port, and generates keys if missing.
 ```bash
 npm start
 ```
-Follow the prompts to enter a username and password.
 
 ### Method 2: Manual Start
-1. Generate a host key (if first time):
-   ```bash
+1. Generate a host key:
    ```bash
    node scripts/generate_key.js
    ```
-2. Start the server (uses Environment Variables for credentials):
-   ```bash
-   # Linux/Mac
-   export SFTP_USER=myuser
-   export SFTP_PASS=mypass
-   export SFTP_USER=myuser
-   export SFTP_PASS=mypass
-   node src/index.js
-   
+2. Start the server (using Environment Variables):
+   ```powershell
    # Windows (PowerShell)
-   $env:SFTP_USER="myuser"; $env:SFTP_PASS="mypass"; node src/index.js
+   $env:SFTP_USER="myuser"; $env:SFTP_PASS="mypass"; $env:SFTP_PORT="2222"; node src/index.js
    ```
-   *Defaults if unset: `user` / `password`*
 
-## Connecting to the Server
-**Host:** Your IP Address (e.g., `192.168.1.x` or `localhost`)
-**Port:** `2222`
-
-### Command Line
-```bash
-sftp -P 2222 USERNAME@HOST_IP
-```
-
-## Public Access (Port Forwarding)
-To access from the internet:
-1. Log into your router.
-2. Forward external port `2222` to your machine's local IP on port `2222`.
-3. Connect using your **Public IP**.
+## Windows Server Tips
+- **Firewall:** Ensure the configured port (default 2222) is open in the Windows Defender Firewall.
+- **Permissions:** Make sure the user running the Node.js process has read/write permissions to the `sftp_root` folder.
+- **Port Conflict:** Windows Server might have OpenSSH Server enabled on port 22. This script uses 2222 by default to avoid conflict.
 
 ## Project Structure
-- `scripts/start.js`: Interactive launcher script.
-- `src/index.js`: Main server logic and SFTP request handling.
-- `scripts/generate_key.js`: Utility to generate RSA host keys.
-- `sftp_root/`: The root directory for SFTP users.
-- `keys/`: Directory for storing host keys.
+- `scripts/start.js`: Interactive launcher.
+- `src/index.js`: Core SFTP server logic.
+- `scripts/generate_key.js`: Host key generator.
+- `sftp_root/`: Root directory for users (chroot).
+- `keys/`: Storage for RSA host keys.
 
 ## License
 MIT
 
 ## Author
-
-**Rajat Gupta**
-Founder, [Thinksaga LLP](https://thinksaga.in)
+**Rajat Gupta**  
+Founder, [Thinksaga LLP](https://thinksaga.in)  
 Email: [ceo@thinksaga.in](mailto:ceo@thinksaga.in)
